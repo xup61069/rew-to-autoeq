@@ -1,4 +1,4 @@
-"""Tests for the core conversion logic."""
+"""核心轉換邏輯的測試。"""
 
 import csv
 import math
@@ -73,7 +73,7 @@ class GridAndInterpolationTests(unittest.TestCase):
     def test_interpolation_is_log_linear(self):
         data = [(20.0, 0.0), (80.0, 20.0)]
         grid = interpolate_to_grid(data, 20, 80, 1)
-        # 40 Hz is exactly the log midpoint between 20 and 80 Hz.
+        # 40 Hz 剛好是 20 與 80 Hz 的對數中點。
         at_40 = [spl for freq, spl in grid if abs(freq - 40.0) < 1e-9]
         self.assertEqual(len(at_40), 1)
         self.assertAlmostEqual(at_40[0], 10.0, places=9)
@@ -145,7 +145,7 @@ class CsvAndConversionTests(unittest.TestCase):
                 rows = list(csv.reader(f))
             self.assertEqual(rows[0], ["frequency", "raw"])
             self.assertEqual(len(rows) - 1, len(result["points"]))
-            # Every value should be rounded to two decimals.
+            # 每個數值都應該四捨五入到小數兩位。
             for _, raw in rows[1:]:
                 self.assertEqual(len(raw.split(".")[1]), 2)
 

@@ -1,4 +1,4 @@
-"""Tests for the command line interface."""
+"""指令列介面的測試。"""
 
 import tempfile
 import unittest

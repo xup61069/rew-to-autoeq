@@ -1,4 +1,4 @@
-"""Core conversion logic for turning REW exports into AutoEQ CSVs."""
+"""把 REW 匯出檔轉成 AutoEQ CSV 的核心轉換邏輯。"""
 
 from __future__ import annotations
 
@@ -26,11 +26,11 @@ AUTOEQ_HEADER = ("frequency", "raw")
 
 
 class ConversionError(ValueError):
-    """Raised when a REW file cannot be parsed or converted."""
+    """REW 檔無法解析或轉換時拋出的例外。"""
 
 
 def _decode_text(path: Path) -> str:
-    """Decode a measurement file, trying common encodings in order."""
+    """解碼量測檔，依序嘗試常見的編碼。"""
     raw = path.read_bytes()
     for encoding in ("utf-8-sig", "utf-8", "big5", "gb18030", "latin-1"):
         try:
@@ -41,14 +41,14 @@ def _decode_text(path: Path) -> str:
 
 
 def _split_row(line: str) -> List[str]:
-    """Split a REW row, supporting comma and tab separated exports."""
+    """切分 REW 的一列資料，支援逗號與 Tab 分隔的匯出檔。"""
     if "\t" in line:
         return [cell.strip() for cell in line.split("\t")]
     return [cell.strip() for cell in line.split(",")]
 
 
 def _looks_like_header(line: str) -> bool:
-    """Return True when the first cell is text rather than a number."""
+    """第一個欄位是文字而非數字時，回傳 True。"""
     cells = _split_row(line)
     if not cells:
         return False
@@ -60,7 +60,7 @@ def _looks_like_header(line: str) -> bool:
 
 
 def _parse_header(line: str) -> Dict[str, int]:
-    """Locate the frequency and SPL columns in a header row."""
+    """在標題列中找出頻率與 SPL 欄位的位置。"""
     indices: Dict[str, int] = {}
     for i, cell in enumerate(_split_row(line)):
         key = cell.lower()
@@ -77,22 +77,22 @@ def _parse_header(line: str) -> Dict[str, int]:
             break
 
     if freq_col is None or mag_col is None:
-        raise ConversionError(f"Could not identify frequency/SPL columns in header: {line}")
+        raise ConversionError(f"無法在標題列中找出頻率/SPL 欄位：{line}")
     return {"freq": freq_col, "spl": mag_col}
 
 
 def parse_rew_file(
     path: str | Path,
 ) -> Tuple[Dict[str, str], List[Tuple[float, float]]]:
-    """Parse a REW text export into metadata and (frequency, SPL) pairs.
+    """把 REW 文字匯出檔解析成中繼資料與 (頻率, SPL) 資料對。
 
-    REW comment lines start with ``*`` and data rows are normally
-    ``Freq(Hz), SPL(dB), Phase(degrees)``. Files without a header row are
-    also accepted, in which case the first two columns are used.
+    REW 的註解行以 ``*`` 開頭，資料列通常是
+    ``Freq(Hz), SPL(dB), Phase(degrees)``。沒有標題列的檔案也能接受，
+    此時直接使用前兩個欄位。
 
     Returns:
-        Tuple of ``(metadata, data)`` where metadata is a dict of comment
-        header fields and data is a list of ``(freq_hz, spl_db)`` tuples.
+        回傳 ``(metadata, data)``，其中 metadata 是註解標題欄位的字典，
+        data 是 ``(freq_hz, spl_db)`` 元組的列表。
     """
     text = _decode_text(Path(path))
     metadata: Dict[str, str] = {}
@@ -129,18 +129,18 @@ def parse_rew_file(
             data.append((freq, spl))
 
     if not data:
-        raise ConversionError(f"No frequency response data found in {path}")
+        raise ConversionError(f"在 {path} 中找不到頻率響應資料")
     return metadata, data
 
 
 def build_log_grid(
     start_freq: float, end_freq: float, steps_per_octave: int = 20
 ) -> List[float]:
-    """Build a log-spaced frequency grid from ``start_freq`` to ``end_freq``."""
+    """從 ``start_freq`` 到 ``end_freq`` 建立對數間隔的頻率格點。"""
     if start_freq <= 0 or end_freq <= start_freq:
-        raise ValueError("start_freq must be positive and end_freq must be larger")
+        raise ValueError("start_freq 必須為正數，且 end_freq 必須大於 start_freq")
     if steps_per_octave <= 0:
-        raise ValueError("steps_per_octave must be positive")
+        raise ValueError("steps_per_octave 必須為正數")
 
     freqs: List[float] = []
     f = float(start_freq)
@@ -157,11 +157,10 @@ def interpolate_to_grid(
     end_freq: float = 20000,
     steps_per_octave: int = 20,
 ) -> List[Tuple[float, float]]:
-    """Interpolate response points onto a log-spaced frequency grid.
+    """把響應資料內插到對數間隔的頻率格點上。
 
-    Values are linearly interpolated in log-frequency space, which is the
-    natural interpolation for audio measurement data. Points outside the
-    measured range are clamped to the nearest measured value.
+    在對數頻率空間中做線性內插，這是音訊量測資料的自然內插方式。
+    超出量測範圍的點會固定在最接近的量測值。
     """
     if not data:
         return []
@@ -194,7 +193,7 @@ def interpolate_to_grid(
 def smooth_response(
     data: Sequence[Tuple[float, float]], octaves: float = 1.0 / 3.0
 ) -> List[Tuple[float, float]]:
-    """Apply fractional-octave Gaussian smoothing to a response curve."""
+    """對響應曲線套用分數倍頻程高斯平滑。"""
     if octaves <= 0:
         return list(data)
 
@@ -220,13 +219,13 @@ def normalize_response(
     mode: str = "mean",
     reference_freq: Optional[float] = None,
 ) -> List[Tuple[float, float]]:
-    """Normalize SPL values into relative dB.
+    """把 SPL 數值正規化成相對 dB。
 
-    Supported modes:
-    - ``mean``: center the response on the average SPL (default).
-    - ``median``: center the response on the median SPL.
-    - ``reference``: set the nearest point to ``reference_freq`` to 0 dB.
-    - ``none``: keep absolute SPL values unchanged.
+    支援的模式：
+    - ``mean``：以平均 SPL 為中心（預設）。
+    - ``median``：以中位數 SPL 為中心。
+    - ``reference``：把最接近 ``reference_freq`` 的點設為 0 dB。
+    - ``none``：保留絕對 SPL 數值不變。
     """
     if mode == "none":
         return [(freq, round(spl, 2)) for freq, spl in data]
@@ -245,10 +244,10 @@ def normalize_response(
             offset = (ordered[n // 2 - 1] + ordered[n // 2]) / 2.0
     elif mode == "reference":
         if reference_freq is None:
-            raise ValueError("normalize=reference requires reference_freq")
+            raise ValueError("normalize=reference 需要指定 reference_freq")
         offset = min(data, key=lambda p: abs(p[0] - reference_freq))[1]
     else:
-        raise ValueError(f"Unknown normalization mode: {mode}")
+        raise ValueError(f"未知的正規化模式：{mode}")
 
     return [(freq, round(spl - offset, 2)) for freq, spl in data]
 
@@ -256,7 +255,7 @@ def normalize_response(
 def write_autoeq_csv(
     data: Sequence[Tuple[float, float]], output_path: str | Path
 ) -> None:
-    """Write response data in the CSV format AutoEQ reads."""
+    """以 AutoEQ 可讀取的 CSV 格式寫出響應資料。"""
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
@@ -278,16 +277,16 @@ def convert_file(
     reference_freq: Optional[float] = None,
     interpolate: bool = True,
 ) -> Dict[str, object]:
-    """Convert a single REW export to AutoEQ format.
+    """把單一 REW 匯出檔轉成 AutoEQ 格式。
 
     Returns:
-        A dict with metadata, the converted points, and input/output paths.
+        一個包含中繼資料、轉換後的資料點、輸入與輸出路徑的字典。
     """
     metadata, data = parse_rew_file(input_path)
     data = [(freq, spl) for freq, spl in data if min_freq <= freq <= max_freq]
     if not data:
         raise ConversionError(
-            f"No data points found between {min_freq:g} Hz and {max_freq:g} Hz"
+            f"在 {min_freq:g} Hz 到 {max_freq:g} Hz 之間找不到任何資料點"
         )
 
     if interpolate:
