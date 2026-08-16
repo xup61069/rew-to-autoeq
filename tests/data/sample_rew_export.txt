@@ -1,0 +1,27 @@
+* Measurement data measured by REW V5.40 beta 132
+* Source: Headset (Test DAC), MICROPHONE (IEC 711), L, ���q: 1.000
+* Format: 512k Log Swept Sine, 1 sweep at -18.0 dBFS
+* Dated: 2026 Aug 16 14:26:58
+* REW Settings:
+*  C-weighting compensation: Off
+*  Target level: 75.0 dB
+* Note: Sample export used by the test suite
+* Measurement: L+R Aug 16
+* Smoothing: None
+* Frequency Step: 0.36621094 Hz
+* Start Frequency: 0.36621094 Hz
+*
+* Freq(Hz), SPL(dB), Phase(degrees)
+0.366211, 36.488, -61.7982
+1.098633, 48.948, 3.6083
+20.141602, 106.195, 65.8262
+40.283203, 107.564, 33.8234
+100.341797, 107.714, 11.5974
+200.317383, 106.694, 4.5700
+500.000000, 101.000, 10.0000
+1000.000000, 98.000, 15.0000
+2000.000000, 95.000, -20.0000
+5000.000000, 90.000, -50.0000
+10000.000000, 85.000, -80.0000
+19999.877930, 79.647, -131.8411
+
