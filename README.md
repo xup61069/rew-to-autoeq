@@ -1,5 +1,7 @@
 # REW to AutoEQ
 
+[繁體中文版](README.zh-TW.md)
+
 Convert [REW](https://www.roomeqwizard.com/) (Room EQ Wizard) measurement exports into CSV files that [AutoEQ](https://autoeq.app) can read directly.
 
 REW saves measurements as text files with comment headers (`* ...`) and columns such as `Freq(Hz), SPL(dB), Phase(degrees)`. AutoEQ expects a simple `frequency,raw` CSV with relative dB values. This tool bridges the two: it parses the REW export, filters and interpolates the response onto a log-spaced grid, optionally applies fractional-octave smoothing, normalizes to relative dB, and writes the AutoEQ-ready CSV.
@@ -107,4 +109,3 @@ python -m unittest discover -s tests -v
 ## License
 
 MIT
-
