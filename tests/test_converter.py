@@ -42,6 +42,30 @@ class ParseRewFileTests(unittest.TestCase):
             _, data = parse_rew_file(path)
             self.assertEqual(data, [(20.0, 100.0), (100.0, 90.0)])
 
+    def test_parses_semicolon_separated_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "semicolon.txt"
+            path.write_text(
+                "Freq(Hz); SPL(dB); Phase(degrees)\n"
+                "20; 100; 1\n"
+                "100; 90; 2\n",
+                encoding="utf-8",
+            )
+            _, data = parse_rew_file(path)
+            self.assertEqual(data, [(20.0, 100.0), (100.0, 90.0)])
+
+    def test_parses_space_separated_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "space.txt"
+            path.write_text(
+                "Freq(Hz) SPL(dB) Phase(degrees)\n"
+                "20 100 1\n"
+                "100 90 2\n",
+                encoding="utf-8",
+            )
+            _, data = parse_rew_file(path)
+            self.assertEqual(data, [(20.0, 100.0), (100.0, 90.0)])
+
     def test_accepts_files_without_header(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "bare.csv"
@@ -117,6 +141,21 @@ class SmoothingAndNormalizationTests(unittest.TestCase):
         data = [(20.0, 100.0), (1000.0, 108.0), (10000.0, 90.0)]
         normalized = normalize_response(data, "reference", reference_freq=1000)
         self.assertEqual(normalized[1][1], 0.0)
+
+    def test_normalize_reference_interpolates_between_points(self):
+        data = [(20.0, 100.0), (80.0, 120.0)]
+        normalized = normalize_response(data, "reference", reference_freq=40)
+        self.assertEqual(normalized, [(20.0, -10.0), (80.0, 10.0)])
+
+    def test_normalize_reference_clamps_outside_range(self):
+        data = [(20.0, 100.0), (80.0, 120.0)]
+        normalized = normalize_response(data, "reference", reference_freq=10)
+        self.assertEqual(normalized, [(20.0, 0.0), (80.0, 20.0)])
+
+    def test_normalize_reference_rejects_non_positive_frequency(self):
+        data = [(20.0, 100.0), (80.0, 120.0)]
+        with self.assertRaises(ValueError):
+            normalize_response(data, "reference", reference_freq=0)
 
     def test_normalize_none_keeps_absolute_values(self):
         data = [(20.0, 100.1234)]

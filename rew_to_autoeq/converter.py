@@ -41,10 +41,14 @@ def _decode_text(path: Path) -> str:
 
 
 def _split_row(line: str) -> List[str]:
-    """切分 REW 的一列資料，支援逗號與 Tab 分隔的匯出檔。"""
+    """切分 REW 的一列資料，支援逗號、分號、Tab 與空白分隔的匯出檔。"""
     if "\t" in line:
         return [cell.strip() for cell in line.split("\t")]
-    return [cell.strip() for cell in line.split(",")]
+    if ";" in line:
+        return [cell.strip() for cell in line.split(";")]
+    if "," in line:
+        return [cell.strip() for cell in line.split(",")]
+    return line.split()
 
 
 def _looks_like_header(line: str) -> bool:
@@ -214,6 +218,24 @@ def smooth_response(
     return result
 
 
+def _interpolate_at(data: Sequence[Tuple[float, float]], freq: float) -> float:
+    """在對數頻率空間中，於單一頻率做線性內插；超出量測範圍時取最近的量測值。"""
+    points = sorted(data, key=lambda p: p[0])
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    idx = bisect.bisect_left(xs, freq)
+    if idx == 0:
+        return ys[0]
+    if idx == len(xs):
+        return ys[-1]
+    if xs[idx] == freq:
+        return ys[idx]
+    x0, y0 = xs[idx - 1], ys[idx - 1]
+    x1, y1 = xs[idx], ys[idx]
+    t = (math.log10(freq) - math.log10(x0)) / (math.log10(x1) - math.log10(x0))
+    return y0 + t * (y1 - y0)
+
+
 def normalize_response(
     data: Sequence[Tuple[float, float]],
     mode: str = "mean",
@@ -224,7 +246,7 @@ def normalize_response(
     支援的模式：
     - ``mean``：以平均 SPL 為中心（預設）。
     - ``median``：以中位數 SPL 為中心。
-    - ``reference``：把最接近 ``reference_freq`` 的點設為 0 dB。
+    - ``reference``：把 ``reference_freq`` 設為 0 dB（以對數空間線性內插計算）。
     - ``none``：保留絕對 SPL 數值不變。
     """
     if mode == "none":
@@ -245,7 +267,9 @@ def normalize_response(
     elif mode == "reference":
         if reference_freq is None:
             raise ValueError("normalize=reference 需要指定 reference_freq")
-        offset = min(data, key=lambda p: abs(p[0] - reference_freq))[1]
+        if reference_freq <= 0:
+            raise ValueError("reference_freq 必須為正數")
+        offset = _interpolate_at(data, reference_freq)
     else:
         raise ValueError(f"未知的正規化模式：{mode}")
 

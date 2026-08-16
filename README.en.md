@@ -4,25 +4,25 @@
 
 Convert [REW](https://www.roomeqwizard.com/) (Room EQ Wizard) measurement exports into CSV files that [AutoEQ](https://autoeq.app) can read directly.
 
-REW saves measurements as text files with comment headers (`* ...`) and columns such as `Freq(Hz), SPL(dB), Phase(degrees)`. AutoEQ expects a simple `frequency,raw` CSV with relative dB values. This tool bridges the two: it parses the REW export, filters and interpolates the response onto a log-spaced grid, optionally applies fractional-octave smoothing, normalizes to relative dB, and writes the AutoEQ-ready CSV.
+REW saves measurements as text files with comment headers (`* ...`) and columns such as `Freq(Hz), SPL(dB), Phase(degrees)`. AutoEQ expects a simple `frequency,raw` CSV with dB values (relative or absolute; AutoEq re-centers to 1 kHz after upload). This tool bridges the two: it parses the REW export, filters and interpolates the response onto a log-spaced grid, optionally applies fractional-octave smoothing, normalizes to relative dB, and writes the AutoEQ-ready CSV.
 
 ## Features
 
 - Parses REW text exports (comma or tab separated, with or without a header row)
 - Handles common file encodings including UTF-8, Big5 and GB18030
 - Filters the response to the requested frequency range (default 20 Hz - 20 kHz)
-- Interpolates onto a 1/20 octave log grid, matching AutoEQ's data convention
+- Interpolates onto a 1/20 octave log grid (AutoEq re-interpolates on upload, so this resolution does not affect the final result)
 - Optional fractional-octave Gaussian smoothing (`--smooth 1/3`, `1/6`, ...)
-- Normalization modes: mean (default), median, reference frequency, or none
+- Normalization modes: mean (default), median, reference frequency, or none (AutoEq re-centers to 1 kHz after upload)
 - Batch conversion with `--output-dir`
 - Pure Python standard library, no dependencies
 
 ## Install
 
-The script works without installation:
+The script works without installation (from the project root):
 
 ```bash
-python rew_to_autoeq/cli.py measurement.txt
+python -m rew_to_autoeq measurement.txt
 ```
 
 To install the command line tool:
@@ -72,7 +72,7 @@ rew2autoeq measurement.txt --no-normalize --no-interpolate
 | `-o, --output` | Output CSV path (single input only) |
 | `--output-dir` | Output directory for batch conversion |
 | `--smooth OCTAVES` | Fractional-octave smoothing width, e.g. `1/3`, `1/6`, `0.3` |
-| `--normalize MODE` | `mean`, `median`, `reference`, or `none` (default: `mean`) |
+| `--normalize MODE` | `mean`, `median`, `reference`, or `none` (default: `mean`; `reference` with `--reference-freq 1000` matches AutoEq's 1 kHz centering) |
 | `--reference-freq HZ` | Reference frequency for `--normalize reference` |
 | `--min-freq HZ` | Lowest frequency kept (default: 20) |
 | `--max-freq HZ` | Highest frequency kept (default: 20000) |
@@ -124,7 +124,7 @@ After processing with AutoEQ, the generated compensation EQ might look like:
 | Peaking | 1750 Hz | 1.28  | -11.9 dB |
 | Peaking | 6667 Hz | 0.18  | -7.9 dB |
 
-The three low-frequency filters boost the bass back to its original level, while the two high-frequency cuts compensate for resonances introduced by the vent and tip geometry. Your specific values will vary depending on the IEM, tip model, and ear canal coupling -- always measure your own setup.
+The three low-frequency filters boost the bass back to its original level, while the two high-frequency cuts compensate for resonances introduced by the vent and tip geometry. Your specific values will vary depending on the IEM, tip model, and ear canal coupling -- always measure your own setup. For bass compensation, a low-shelf filter is usually more natural than stacking several peaking filters; see "Background and Related Research" below.
 
 ### Practical Tips
 
@@ -132,6 +132,40 @@ The three low-frequency filters boost the bass back to its original level, while
 - The vent diameter matters: larger vents relieve pressure better but leak more bass. Finding the right balance is personal.
 - Re-measure after swapping tips, even between batches of the same model -- manufacturing tolerances and ear tip aging can shift the response.
 - Foam tips can also relieve pressure (they compress and decompress), but they dampen treble differently than silicone vents.
+
+## Background and Related Research
+
+### Bass Leakage of Vented Ear Tips
+
+The low-frequency response of an in-ear monitor is determined by how well it seals in the ear canal. When fully sealed, the ear canal approximates a pressure chamber and low frequencies are transmitted in full; once there is a vent or a gap, bass escapes through the opening and the response becomes approximately a **first-order high-pass filter**: below the corner frequency, the response rolls off at about **6 dB/octave**.
+
+The corner frequency is set jointly by the acoustic mass of the vent (diameter, length) and the compliance of the air in the ear canal (canal volume) -- larger vents and smaller canal volumes push the corner frequency higher, causing more bass loss. This is the physical reason why "better pressure relief means more bass leakage" and why different tip sizes measure differently in the bass.
+
+### What AutoEq Does After Upload
+
+After uploading the CSV to autoeq.app, AutoEq's processing pipeline (`FrequencyResponse.process()`) roughly does:
+
+1. **Interpolation**: re-interpolates the response onto its own log grid (default ratio 1.01 per step, about 1/70 octave).
+2. **Centering**: sets 1 kHz to 0 dB (`center(1000)`), so whether the uploaded file uses relative or absolute dB does not matter.
+3. **Target alignment**: compares against a target curve (e.g. Harman) and computes the error.
+4. **Smoothing**: applies Savitzky-Golay fractional-octave smoothing.
+5. **Equalization**: generates the parametric EQ filters.
+
+In other words, this tool only converts the REW measurement into a CSV that AutoEq can read; the subsequent interpolation, centering, target matching and EQ generation are all handled by AutoEq.
+
+### Smoothing Implementation Differences
+
+- This tool: a Gaussian window in log-frequency space (`--smooth`).
+- AutoEq: Savitzky-Golay polynomial smoothing.
+
+Both are common fractional-octave smoothing implementations. Width parameters such as `1/3` and `1/6` mean the same thing, but the curve details differ slightly.
+
+### References
+
+- [AutoEq source code](https://github.com/jaakkopasanen/AutoEq) (`autoeq/frequency_response.py`, `autoeq/csv.py`, `autoeq/constants.py`)
+- [REW (Room EQ Wizard)](https://www.roomeqwizard.com/)
+- IEC 60318-4 (IEC 711) ear simulator coupler measurement practice
+- Reddit discussions on IEM pressure and vented tips (see the "Use Case" section above)
 
 ## Development
 

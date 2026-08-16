@@ -4,25 +4,25 @@
 
 把 [REW](https://www.roomeqwizard.com/)（Room EQ Wizard）的頻率響應匯出檔，轉成 [AutoEQ](https://autoeq.app) 可以直接讀取的 CSV。
 
-REW 匯出的量測檔是純文字檔，通常會包含 `* ...` 開頭的註解行，以及 `Freq(Hz), SPL(dB), Phase(degrees)` 這類欄位。AutoEQ 則預期一個只有 `frequency,raw` 兩欄、數值是相對 dB 的 CSV。這個工具負責兩者之間的轉換：讀取 REW 匯出檔、過濾頻段、內插到對數間隔的頻率格點、可選的分數倍頻程平滑、轉成相對 dB，最後輸出 AutoEQ 可用的 CSV。
+REW 匯出的量測檔是純文字檔，通常會包含 `* ...` 開頭的註解行，以及 `Freq(Hz), SPL(dB), Phase(degrees)` 這類欄位。AutoEQ 則預期一個只有 `frequency,raw` 兩欄、數值是 dB 的 CSV（相對或絕對皆可，AutoEq 上傳後會以 1 kHz 重新置中）。這個工具負責兩者之間的轉換：讀取 REW 匯出檔、過濾頻段、內插到對數間隔的頻率格點、可選的分數倍頻程平滑、轉成相對 dB，最後輸出 AutoEQ 可用的 CSV。
 
 ## 功能
 
 - 解析 REW 文字匯出檔（逗號或 Tab 分隔，有無標題列都可以）
 - 支援常見編碼，包含 UTF-8、Big5、GB18030
 - 可限制輸出頻段（預設 20 Hz - 20 kHz）
-- 內插到 1/20 倍頻程的對數頻率格點，符合 AutoEQ 資料慣例
+- 內插到 1/20 倍頻程的對數頻率格點（AutoEq 上傳後會自行重新內插，解析度不影響最終結果）
 - 可選分數倍頻程高斯平滑（`--smooth 1/3`、`1/6` 等）
-- 正規化模式：平均（預設）、中位數、指定參考頻率、或不正規化
+- 正規化模式：平均（預設）、中位數、指定參考頻率、或不正規化（AutoEq 上傳後會以 1 kHz 重新置中）
 - 支援批次轉換（`--output-dir`）
 - 純 Python 標準函式庫，無額外依賴
 
 ## 安裝
 
-不需要安裝也能直接跑：
+不需要安裝也能直接跑（在專案根目錄）：
 
 ```bash
-python rew_to_autoeq/cli.py measurement.txt
+python -m rew_to_autoeq measurement.txt
 ```
 
 安裝成指令列工具：
@@ -72,7 +72,7 @@ rew2autoeq measurement.txt --no-normalize --no-interpolate
 | `-o, --output` | 輸出 CSV 路徑（只能用在單一輸入檔） |
 | `--output-dir` | 批次轉換的輸出資料夾 |
 | `--smooth OCTAVES` | 分數倍頻程平滑寬度，例如 `1/3`、`1/6`、`0.3` |
-| `--normalize MODE` | `mean`、`median`、`reference` 或 `none`（預設 `mean`） |
+| `--normalize MODE` | `mean`、`median`、`reference` 或 `none`（預設 `mean`；`reference` 搭配 `--reference-freq 1000` 即為 AutoEq 的 1 kHz 置中） |
 | `--reference-freq HZ` | 搭配 `--normalize reference` 使用的參考頻率 |
 | `--min-freq HZ` | 保留的最低頻率（預設 20） |
 | `--max-freq HZ` | 保留的最高頻率（預設 20000） |
@@ -124,7 +124,7 @@ frequency,raw
 | Peaking | 1750 Hz | 1.28  | -11.9 dB |
 | Peaking | 6667 Hz | 0.18  | -7.9 dB |
 
-低頻的三個濾波器把低頻推回原始水準，高頻的兩個衰減則補償洩壓孔和耳塞套幾何結構造成的共振。實際數值會因 IEM 型號、耳塞型號和耳道耦合而異，務必量測自己的設備。
+低頻的三個濾波器把低頻推回原始水準，高頻的兩個衰減則補償洩壓孔和耳塞套幾何結構造成的共振。實際數值會因 IEM 型號、耳塞型號和耳道耦合而異，務必量測自己的設備。對於低頻補償，用 low-shelf 濾波器通常比疊多個 peaking 更自然，詳見「原理與相關研究」。
 
 ### 實用建議
 
@@ -132,6 +132,40 @@ frequency,raw
 - 洩壓孔直徑很重要：孔越大洩壓效果越好，但低頻洩漏也越多，需要在個人感受和音質之間取得平衡。
 - 更換耳塞後要重新量測，即使是同型號不同批次，製造公差和材料老化都可能改變頻率響應。
 - 泡棉耳塞也能洩壓（壓縮後回彈），但它們對高頻的衰減特性與矽膠洩壓耳塞不同。
+
+## 原理與相關研究
+
+### 洩壓耳塞的低頻洩漏
+
+入耳式耳機的低頻響應由耳道密封程度決定。完全密封時，耳道內近似「壓力室」（pressure chamber），低頻能完整傳遞；一旦存在洩壓孔或縫隙，低頻就會從開口漏出，響應變成近似**一階高通濾波器**：轉角頻率以下的響應以約 **6 dB/octave** 的斜率滾降。
+
+轉角頻率由洩壓孔的聲學質量（孔徑、長度）與耳道內空氣的順應性（耳道容積）共同決定——孔越大、耳道容積越小，轉角頻率越高，低頻衰減越嚴重。這就是「洩壓效果越好、低頻漏越多」的物理根源，也是不同尺寸耳塞套會量出不同低頻響應的原因。
+
+### AutoEq 上傳後會做什麼
+
+上傳 CSV 到 autoeq.app 後，AutoEq 的處理管線（`FrequencyResponse.process()`）大致是：
+
+1. **內插**：把響應重新內插到自己的對數網格（預設每個點乘 1.01，約 1/70 倍頻程）。
+2. **置中**：以 1 kHz 設為 0 dB（`center(1000)`），所以上傳檔是相對還是絕對 dB 不影響結果。
+3. **對齊目標曲線**：例如 Harman 目標曲線，計算誤差。
+4. **平滑**：用 Savitzky-Golay 濾波器做分數倍頻程平滑。
+5. **等化**：產生對應的 parametric EQ 濾波器。
+
+換句話說，本工具只負責把 REW 量測轉成 AutoEq 能讀的 CSV，後續的內插、置中、目標曲線比對與 EQ 生成都由 AutoEq 完成。
+
+### 平滑方式差異
+
+- 本工具：對數頻率空間的高斯窗（`--smooth`）。
+- AutoEq：Savitzky-Golay 多項式平滑。
+
+兩者都是 fractional-octave 平滑的常見實作，`1/3`、`1/6` 等寬度參數的意義相同，但曲線細節略有差異。
+
+### 參考資料
+
+- [AutoEq 原始碼](https://github.com/jaakkopasanen/AutoEq)（`autoeq/frequency_response.py`、`autoeq/csv.py`、`autoeq/constants.py`）
+- [REW (Room EQ Wizard)](https://www.roomeqwizard.com/)
+- IEC 60318-4（IEC 711）耳道模擬耦合器的量測慣例
+- Reddit 上關於 IEM 氣壓與洩壓耳塞的討論（見上方「使用案例」）
 
 ## 開發與測試
 
